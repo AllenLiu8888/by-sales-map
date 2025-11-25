@@ -1,0 +1,38 @@
+name: Deploy to Alibaba Cloud
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "🚀 Starting Automatic Deployment..."
+            
+            # --- Configuration ---
+            # REPLACE WITH YOUR PROJECT FOLDER NAME
+            PROJECT_DIR="sales-map"
+            
+            # Navigate to project directory
+            cd /var/www/$PROJECT_DIR
+            
+            # Pull latest code
+            git fetch origin
+            git reset --hard origin/main
+            
+            # --- Build & Restart ---
+            echo "🔧 Updating Static Site..."
+            npm install
+            npm run build
+            
+            echo "🎉 Deployment Complete!"

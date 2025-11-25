@@ -8,7 +8,13 @@ import { getRegionByFeature, REGIONS } from "../utils/regionData";
 // Merge Inner Mongolia cities into the main map
 const mergedFeatures = geoJson.features.filter(
   (f) => f.properties.adcode !== 150000 && f.properties.name !== "内蒙古自治区"
-).concat(innerMongoliaGeoJson.features);
+).concat(innerMongoliaGeoJson.features.map(f => ({
+  ...f,
+  properties: {
+    ...f.properties,
+    cp: f.properties.center // ECharts uses 'cp' for label position
+  }
+})));
 
 const mergedGeoJson = {
   ...geoJson,
@@ -24,6 +30,29 @@ const SalesMap = () => {
 
     const data = mergedGeoJson.features.map((feature) => {
       const region = getRegionByFeature(feature);
+      const isInnerMongoliaCity = feature.properties.adcode && String(feature.properties.adcode).startsWith("15");
+      const isXilinGol = feature.properties.adcode === 152500; // Use Xilin Gol as the anchor for "Inner Mongolia" label
+
+      let labelSettings = {
+        show: true,
+        color: "#000",
+      };
+
+      if (isInnerMongoliaCity) {
+        if (isXilinGol) {
+          labelSettings = {
+            show: true,
+            formatter: "内蒙古", // Custom label for the province
+            fontSize: 26, // Keep it larger than others
+            color: "#000",
+          };
+        } else {
+          labelSettings = {
+            show: false, // Hide other city labels
+          };
+        }
+      }
+
       return {
         name: feature.properties.name,
         value: region ? region.id : 0,
@@ -40,11 +69,9 @@ const SalesMap = () => {
             shadowOffsetX: 0,
             shadowColor: "rgba(0, 0, 0, 0.5)",
           },
-          label: {
-            show: true,
-            color: "#000",
-          },
+          label: labelSettings, // Apply custom label settings
         },
+        label: labelSettings, // Apply custom label settings to normal state too
       };
     });
 
@@ -91,10 +118,21 @@ const SalesMap = () => {
           map: "china", // Map registered name
           roam: true,
           zoom: 1.2,
+          selectedMode: false, // Disable selection to prevent "stuck yellow" color
           label: {
             show: true,
             color: "#333",
-            fontSize: 10,
+            fontSize: 26, // Increased font size again
+            formatter: function (params) {
+              const name = params.name;
+              // Simplify names: remove suffixes like Province, City, Autonomous Region
+              return name
+                .replace(/(?:自治区|省|市|维吾尔|回族|壮族|特别行政区)/g, "")
+                .replace("内蒙古", "内蒙古"); // Ensure Inner Mongolia is kept (though handled separately below)
+            },
+          },
+          labelLayout: {
+            hideOverlap: false,
           },
           itemStyle: {
             areaColor: "#eee",
