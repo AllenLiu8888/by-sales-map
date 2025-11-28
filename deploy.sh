@@ -131,9 +131,16 @@ server {
     root \$STATIC_ROOT;
     index index.html;
 
-    location / {
-        try_files \\\$uri \\\$uri/ /index.html;
-    }
+    $(if [ -z "$URL_PREFIX" ]; then
+        echo "    location / {"
+        echo "        try_files \$uri \$uri/ /index.html;"
+        echo "    }"
+    else
+        echo "    location $URL_PREFIX {"
+        echo "        alias \$STATIC_ROOT/;"
+        echo "        try_files \$uri \$uri/ $URL_PREFIX/index.html;"
+        echo "    }"
+    fi)
 
     # Proxy API requests if fullstack
     $(if [ "$PROJECT_TYPE" == "fullstack" ]; then
