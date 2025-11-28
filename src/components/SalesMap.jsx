@@ -4,6 +4,7 @@ import * as echarts from "echarts";
 import geoJson from "../assets/100000_full.json";
 import innerMongoliaGeoJson from "../assets/150000_full.json";
 import { getRegionByFeature, REGIONS } from "../utils/regionData";
+import { useSettings } from "../context/SettingsContext";
 
 // Merge Inner Mongolia cities into the main map
 const mergedFeatures = geoJson.features.filter(
@@ -21,9 +22,10 @@ const mergedGeoJson = {
   features: mergedFeatures,
 };
 
-const SalesMap = () => {
+const SalesMap = ({ onRegionSelect, selectedRegion }) => {
   const [option, setOption] = useState({});
   const chartRef = useRef(null);
+  const { fontSize, regionColors } = useSettings();
 
   useEffect(() => {
     echarts.registerMap("china", mergedGeoJson);
@@ -43,7 +45,7 @@ const SalesMap = () => {
           labelSettings = {
             show: true,
             formatter: "内蒙古", // Custom label for the province
-            fontSize: 26, // Keep it larger than others
+            fontSize: fontSize, // Strictly synchronize with global font size
             color: "#000",
           };
         } else {
@@ -53,18 +55,42 @@ const SalesMap = () => {
         }
       }
 
+      // Special handling for specific labels
+      if (feature.properties.name.includes("香港") || feature.properties.name.includes("澳门")) {
+        labelSettings.show = false;
+      }
+
+      if (feature.properties.name.includes("北京")) {
+        labelSettings.offset = [0, -15];
+      }
+      if (feature.properties.name.includes("天津")) {
+        labelSettings.offset = [30, 10];
+      }
+      if (feature.properties.name.includes("河北")) {
+        labelSettings.offset = [-30, 30];
+      }
+
+      // Focus Mode Logic
+      const isSelected = selectedRegion ? (region && region.id === selectedRegion.id) : true;
+      const areaColor = isSelected
+        ? (region ? regionColors[region.id] : "#eee")
+        : "#f3f4f6"; // Gray out if not selected
+      const borderColor = isSelected
+        ? (region ? region.borderColor : "#999")
+        : "#e5e7eb";
+
       return {
         name: feature.properties.name,
         value: region ? region.id : 0,
         region: region,
         itemStyle: {
-          areaColor: region ? region.color : "#eee",
-          borderColor: region ? region.borderColor : "#999",
+          areaColor: areaColor,
+          borderColor: borderColor,
           borderWidth: 0.5,
         },
         emphasis: {
           itemStyle: {
-            areaColor: region ? region.color : "#eee", // Keep same color on hover, maybe darken slightly?
+            areaColor: areaColor, // Keep color stable on hover
             shadowBlur: 10,
             shadowOffsetX: 0,
             shadowColor: "rgba(0, 0, 0, 0.5)",
@@ -93,12 +119,27 @@ const SalesMap = () => {
           const { name, data } = params;
           if (!data || !data.region) return `${name}: 未分配区域`;
           const { region } = data;
+
+          // Find specific rep
+          let rep = "待定";
+          if (region.team) {
+            if (region.team.areaReps && region.team.areaReps[name]) {
+              // If it's an array, join them
+              const reps = region.team.areaReps[name];
+              rep = Array.isArray(reps) ? reps.join("、") : reps;
+            } else if (region.team.cities && region.team.cities[name]) {
+              rep = region.team.cities[name];
+            } else if (region.team.areaReps) {
+              // Try to find if the city belongs to a province in areaReps? 
+              // For now, simple lookup. If not found, check if it's a province name match
+            }
+          }
+
           return `
             <div class="p-2">
               <div class="font-bold text-lg mb-1">${name}</div>
-              <div class="text-sm">所属: <span class="font-semibold" style="color: ${region.borderColor}">${region.name}</span></div>
-              <div class="text-sm">负责人: ${region.manager}</div>
-              <div class="text-xs text-gray-500 mt-1">${region.area}</div>
+              <div class="text-sm mb-1">所属: <span class="font-semibold" style="color: ${region.borderColor}">${region.name}</span></div>
+              <div class="text-sm">业务员: <span class="font-semibold text-blue-600">${rep}</span></div>
             </div>
           `;
         },
@@ -110,7 +151,6 @@ const SalesMap = () => {
         },
         extraCssText: "box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); border-radius: 0.5rem;",
       },
-      // geo: { ... }, // Removed separate geo component to avoid style conflicts
       series: [
         {
           name: "Sales Regions",
@@ -122,7 +162,7 @@ const SalesMap = () => {
           label: {
             show: true,
             color: "#333",
-            fontSize: 26, // Increased font size again
+            fontSize: fontSize, // Use dynamic font size
             formatter: function (params) {
               const name = params.name;
               // Simplify names: remove suffixes like Province, City, Autonomous Region
@@ -144,7 +184,13 @@ const SalesMap = () => {
     };
 
     setOption(chartOption);
-  }, []);
+  }, [fontSize, regionColors, selectedRegion]); // Re-render when settings or selection change
+
+  const onChartClick = (params) => {
+    if (params.data && params.data.region) {
+      onRegionSelect(params.data.region);
+    }
+  };
 
   return (
     <div className="w-full h-full bg-slate-50 rounded-xl shadow-inner overflow-hidden relative">
@@ -153,10 +199,10 @@ const SalesMap = () => {
         option={option}
         style={{ height: "100%", width: "100%" }}
         opts={{ renderer: "canvas" }}
+        onEvents={{
+          click: onChartClick,
+        }}
       />
-      <div className="absolute bottom-4 right-4 text-xs text-gray-400 pointer-events-none">
-        * 滚轮缩放 / 拖拽移动
-      </div>
     </div>
   );
 };
